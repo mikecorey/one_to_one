@@ -43,13 +43,21 @@ func insert_record(app *pocketbase.PocketBase, collection_name string, insert_ma
 }
 
 func GetRandomDevo(app *pocketbase.PocketBase) (*models.Record, error) {
-	record, err := app.Dao().FindRecordById("devos", "el7vgh7ef7lr7yu")
+	collection, err := app.Dao().FindCollectionByNameOrId("devos")
 	if err != nil {
-		fmt.Println("DEFAULT DEVO IS MISSING!")
 		return nil, err
 	}
-	fmt.Println("WARNING: YOU'RE NOT RANDOMLY CHOOSING A DEVO.")
-	return record, nil
+
+	query := app.Dao().RecordQuery(collection).
+		OrderBy("RANDOM()").
+		Limit(1)
+
+	rows := []dbx.NullStringMap{}
+	if err := query.All(&rows); err != nil {
+		return nil, err
+	}
+
+	return models.NewRecordsFromNullStringMaps(collection, rows)[0], nil
 }
 
 func main() {
@@ -70,7 +78,7 @@ func main() {
 					fmt.Println("500 @ insert meeting")
 					return c.String(http.StatusInternalServerError, err.Error())
 				}
-				fmt.Printf("%s inserted a meeting with id %s\n", authRecord.Username(), meetingId)
+				fmt.Printf("%s inserted a meeting with id %s using devo on %s\n", authRecord.Username(), meetingId, devoRecord.GetString("verses"))
 				//TODO DO SOMETHING BETTER HERE!!! REDIRECT TO JOIN!
 				//return c.String(http.StatusOK, "Inserted a custom thing")
 				returnUrl := fmt.Sprintf("/m/%s", meetingId)
