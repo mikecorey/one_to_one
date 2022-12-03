@@ -26,18 +26,20 @@ type DevoResponse struct {
 	Questions []string `json:"questions"`
 }
 
-func insert_record(app *pocketbase.PocketBase, collection_name string, insert_map map[string]any) error {
+func insert_record(app *pocketbase.PocketBase, collection_name string, insert_map map[string]any) (string, error) {
 	collection, err := app.Dao().FindCollectionByNameOrId(collection_name)
 	if err != nil {
-		return err
+		fmt.Println("Couldn't find collection name during insert")
+		return "", err
 	}
 	record := models.NewRecord(collection)
 	form := forms.NewRecordUpsert(app, record)
 	form.LoadData(insert_map)
 	if err := form.Submit(); err != nil {
-		return err
+		fmt.Println("submitting form failed during insert.")
+		return "", err
 	}
-	return nil
+	return record.Id, nil
 }
 
 func GetRandomDevo(app *pocketbase.PocketBase) (*models.Record, error) {
@@ -59,18 +61,20 @@ func main() {
 			Handler: func(c echo.Context) error {
 				devoRecord, _ := GetRandomDevo(app)
 				authRecord, _ := c.Get(apis.ContextAuthRecordKey).(*models.Record)
-				meetup_record := map[string]any{
+				meetupRecordMap := map[string]any{
 					"devotional": devoRecord.Id,
 					"host":       authRecord.Id,
 				}
-				err := insert_record(app, "meeting", meetup_record)
+				meetingId, err := insert_record(app, "meeting", meetupRecordMap)
 				if err != nil {
+					fmt.Println("500 @ insert meeting")
 					return c.String(http.StatusInternalServerError, err.Error())
 				}
-				fmt.Println("We inserted a meeting")
+				fmt.Printf("%s inserted a meeting with id %s\n", authRecord.Username(), meetingId)
 				//TODO DO SOMETHING BETTER HERE!!! REDIRECT TO JOIN!
-				return c.String(http.StatusOK, "Inserted a custom thing")
-				//return c.Redirect(http.StatusCreated, )
+				//return c.String(http.StatusOK, "Inserted a custom thing")
+				returnUrl := fmt.Sprintf("/m/%s", meetingId)
+				return c.Redirect(http.StatusSeeOther, returnUrl)
 			},
 			Middlewares: []echo.MiddlewareFunc{
 				apis.RequireRecordAuth(),
@@ -96,7 +100,7 @@ func main() {
 					"meeting":     meetingRecord.Id,
 					"participant": authRecord.Id,
 				}
-				err = insert_record(app, "usermeeting", userMeetupMap)
+				_, err = insert_record(app, "usermeeting", userMeetupMap)
 				if err != nil {
 					return c.String(http.StatusInternalServerError, err.Error())
 				}
